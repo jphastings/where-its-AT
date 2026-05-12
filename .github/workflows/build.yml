@@ -64,7 +64,7 @@ jobs:
           xcrun safari-web-extension-converter \
             dist/chrome \
             --project-location safari-build \
-            --app-name "where it's at" \
+            --app-name "Where it's AT" \
             --bundle-identifier me.byjp.where-its-at \
             --swift \
             --no-prompt \

@@ -1,4 +1,4 @@
-# where it's at — atproto / RDFa browser extension
+# Where it's AT — atproto / RDFa browser extension
 
 A browser extension (Firefox, Chrome, Safari) which highlights elements on webpages that declare their relationship to atproto records using [RDFa `resource` attributes](https://www.w3.org/TR/rdfa-primer/#multiple-items).
 
@@ -84,15 +84,15 @@ The Safari job degrades gracefully:
 
 Add these in **Settings → Secrets and variables → Actions**:
 
-| Name                          | Type                    | Purpose                                                                          |
-| ----------------------------- | ----------------------- | -------------------------------------------------------------------------------- |
-| `APPLE_TEAM_ID`               | secret                  | 10-character Apple Developer Team ID                                             |
-| `APPLE_CERT_P12_BASE64`       | secret                  | `base64` of the Developer ID Application `.p12` exported from Keychain Access    |
-| `APPLE_CERT_PASSWORD`         | secret                  | Password used when exporting that `.p12`                                         |
-| `APPLE_NOTARY_KEY_ID`         | secret                  | App Store Connect API key ID (10 chars)                                          |
-| `APPLE_NOTARY_KEY_ISSUER_ID`  | secret                  | App Store Connect API issuer UUID                                                |
-| `APPLE_NOTARY_KEY_P8_BASE64`  | secret                  | `base64` of the App Store Connect API `.p8` private key                          |
-| `APPLE_BUNDLE_ID`             | **variable** (optional) | Override the default bundle identifier `me.byjp.where-its-at`                    |
+| Name                         | Type                    | Purpose                                                                       |
+| ---------------------------- | ----------------------- | ----------------------------------------------------------------------------- |
+| `APPLE_TEAM_ID`              | secret                  | 10-character Apple Developer Team ID                                          |
+| `APPLE_CERT_P12_BASE64`      | secret                  | `base64` of the Developer ID Application `.p12` exported from Keychain Access |
+| `APPLE_CERT_PASSWORD`        | secret                  | Password used when exporting that `.p12`                                      |
+| `APPLE_NOTARY_KEY_ID`        | secret                  | App Store Connect API key ID (10 chars)                                       |
+| `APPLE_NOTARY_KEY_ISSUER_ID` | secret                  | App Store Connect API issuer UUID                                             |
+| `APPLE_NOTARY_KEY_P8_BASE64` | secret                  | `base64` of the App Store Connect API `.p8` private key                       |
+| `APPLE_BUNDLE_ID`            | **variable** (optional) | Override the default bundle identifier `me.byjp.where-its-at`                 |
 
 To prepare the cert secret:
 

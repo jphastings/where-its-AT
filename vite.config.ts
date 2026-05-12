@@ -13,7 +13,7 @@ function buildManifest(browser: Browser): Record<string, unknown> {
 
   const base: Record<string, unknown> = {
     manifest_version: 3,
-    name: "where it's at",
+    name: "Where it's AT",
     version: pkg.version,
     description: pkg.description,
     permissions: ["scripting", "storage", "clipboardWrite"],
@@ -29,7 +29,7 @@ function buildManifest(browser: Browser): Record<string, unknown> {
         "48": "icons/inactive-48.png",
         "128": "icons/inactive-128.png",
       },
-      default_title: "where it's at — reveal atproto references",
+      default_title: "Where it's AT — reveal atproto references",
     },
     icons: {
       "16": "icons/detected-16.png",

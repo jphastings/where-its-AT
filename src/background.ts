@@ -55,12 +55,12 @@ function pickIcon(state: TabState): IconPaths {
 
 function pickTitle(state: TabState): string {
   if (state.engaged) {
-    return `where it's at — overlay active (${state.count} reference${state.count === 1 ? "" : "s"})`;
+    return `Where it's AT — overlay active (${state.count} reference${state.count === 1 ? "" : "s"})`;
   }
   if (state.detected) {
-    return `where it's at — ${state.count} atproto reference${state.count === 1 ? "" : "s"} found`;
+    return `Where it's AT — ${state.count} atproto reference${state.count === 1 ? "" : "s"} found`;
   }
-  return "where it's at — no atproto references on this page";
+  return "Where it's AT — no atproto references on this page";
 }
 
 // chrome.action.setIcon({ path }) in Chrome MV3 service workers resolves paths
