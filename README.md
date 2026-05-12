@@ -50,7 +50,45 @@ Load unpacked:
 
 ## CI builds
 
-`.github/workflows/build.yml` runs on every push / PR:
+`.github/workflows/build.yml` runs on every push to `main` / PR:
 
-1. Ubuntu runner builds and zips `dist/chrome.zip` and `dist/firefox.zip` (uploaded as workflow artifacts).
+1. Ubuntu runner builds and zips `dist/chrome.zip` and `dist/firefox.zip`, uploaded as workflow artifacts.
 2. macOS runner consumes the Chrome build, runs `xcrun safari-web-extension-converter` to scaffold an Xcode project, and does an unsigned Release build to verify everything compiles. The full Xcode project is uploaded as a `safari-xcode-project` artifact.
+
+## Releases
+
+`.github/workflows/release.yml` runs on every `v*` tag push (e.g. `git tag v0.2.0 && git push --tags`) and publishes a GitHub Release containing:
+
+- `where-its-at-<version>-chrome.zip` — load via `chrome://extensions` → Load unpacked
+- `where-its-at-<version>-firefox.xpi` — load via `about:debugging` (unsigned; for AMO distribution we'd add `web-ext sign`)
+- `where-its-at-<version>-safari.zip` — contains the host `.app` bundle for Safari
+
+The workflow aligns `package.json` and the built manifest version to the git tag automatically, so you only have to bump the tag.
+
+### Safari signing + notarization secrets
+
+The Safari job degrades gracefully:
+
+- No Apple secrets → produces an **unsigned** `.app`. Loadable only via Safari's *Allow Unsigned Extensions* in the Develop menu, useful for personal testing.
+- `APPLE_TEAM_ID` + cert secrets → **signed** with Developer ID Application (Gatekeeper-clean once notarized).
+- Plus notary secrets → **signed and notarized**, ready for distribution outside the App Store.
+
+Add these in **Settings → Secrets and variables → Actions**:
+
+| Name                          | Type                    | Purpose                                                                          |
+| ----------------------------- | ----------------------- | -------------------------------------------------------------------------------- |
+| `APPLE_TEAM_ID`               | secret                  | 10-character Apple Developer Team ID                                             |
+| `APPLE_CERT_P12_BASE64`       | secret                  | `base64` of the Developer ID Application `.p12` exported from Keychain Access    |
+| `APPLE_CERT_PASSWORD`         | secret                  | Password used when exporting that `.p12`                                         |
+| `APPLE_NOTARY_KEY_ID`         | secret                  | App Store Connect API key ID (10 chars)                                          |
+| `APPLE_NOTARY_KEY_ISSUER_ID`  | secret                  | App Store Connect API issuer UUID                                                |
+| `APPLE_NOTARY_KEY_P8_BASE64`  | secret                  | `base64` of the App Store Connect API `.p8` private key                          |
+| `APPLE_BUNDLE_ID`             | **variable** (optional) | Override the default bundle identifier `me.byjp.where-its-at`                    |
+
+To prepare the cert secret:
+
+```sh
+base64 -i /path/to/DeveloperIDApplication.p12 | pbcopy
+```
+
+App Store Connect API keys are created at <https://appstoreconnect.apple.com/access/integrations/api>; download the `.p8` once (Apple won't let you fetch it again) and base64-encode the same way. The key needs at least the **Developer** role for notarization.

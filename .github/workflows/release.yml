@@ -1,0 +1,260 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  chromium-firefox:
+    name: Build Chrome & Firefox
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: pnpm/action-setup@739bfe42ca9233c5e6aca07c1a25a9d34aca49b0 # v6.0.7
+        with:
+          version: 10
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Align package.json version with tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Using version $VERSION"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - run: pnpm typecheck
+
+      - run: pnpm build
+
+      - run: pnpm zip
+
+      - name: Rename artifacts with version
+        run: |
+          mv dist/chrome.zip "dist/where-its-at-${VERSION}-chrome.zip"
+          mv dist/firefox.zip "dist/where-its-at-${VERSION}-firefox.xpi"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: web-extensions
+          path: |
+            dist/where-its-at-*-chrome.zip
+            dist/where-its-at-*-firefox.xpi
+
+  safari:
+    name: Build & sign Safari extension
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: pnpm/action-setup@739bfe42ca9233c5e6aca07c1a25a9d34aca49b0 # v6.0.7
+        with:
+          version: 10
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Align package.json version with tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - run: pnpm build:chrome
+
+      - name: Convert to Safari Web Extension Xcode project
+        id: convert
+        env:
+          BUNDLE_ID: ${{ vars.APPLE_BUNDLE_ID || 'me.byjp.where-its-at' }}
+        run: |
+          mkdir -p safari-build
+          xcrun safari-web-extension-converter \
+            dist/chrome \
+            --project-location safari-build \
+            --app-name "where it's at" \
+            --bundle-identifier "$BUNDLE_ID" \
+            --swift \
+            --no-prompt \
+            --no-open \
+            --force
+
+          PROJECT_DIR=$(find safari-build -maxdepth 2 -name "*.xcodeproj" -type d | head -n 1)
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "Could not locate generated Xcode project under safari-build/"
+            ls -R safari-build
+            exit 1
+          fi
+          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Determine signing path
+        id: signing
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+        run: |
+          SIGN=false
+          NOTARIZE=false
+          if [ -n "$APPLE_TEAM_ID" ] && [ -n "$APPLE_CERT_P12_BASE64" ]; then
+            SIGN=true
+          fi
+          if [ "$SIGN" = true ] && [ -n "$APPLE_NOTARY_KEY_ID" ]; then
+            NOTARIZE=true
+          fi
+          echo "sign=$SIGN" >> "$GITHUB_OUTPUT"
+          echo "notarize=$NOTARIZE" >> "$GITHUB_OUTPUT"
+          if [ "$SIGN" != true ]; then
+            echo "::warning::Apple signing secrets missing — producing unsigned Safari build"
+          elif [ "$NOTARIZE" != true ]; then
+            echo "::warning::Notary key missing — producing signed but un-notarized Safari build"
+          fi
+
+      - name: Import code-signing certificate
+        if: steps.signing.outputs.sign == 'true'
+        env:
+          P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -lut 3600 build.keychain
+          echo "$P12_BASE64" | base64 --decode > /tmp/cert.p12
+          security import /tmp/cert.p12 -k build.keychain -P "$P12_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productbuild
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          rm /tmp/cert.p12
+
+      - name: Build Safari Xcode project (signed)
+        if: steps.signing.outputs.sign == 'true'
+        env:
+          PROJECT_DIR: ${{ steps.convert.outputs.project_dir }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcodebuild \
+            -project "$PROJECT_DIR" \
+            -scheme "where it's at" \
+            -configuration Release \
+            -derivedDataPath safari-build/derived \
+            -archivePath safari-build/where-its-at.xcarchive \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            archive
+
+          cat > /tmp/export-options.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>developer-id</string>
+            <key>teamID</key>
+            <string>${TEAM_ID}</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -exportArchive \
+            -archivePath safari-build/where-its-at.xcarchive \
+            -exportOptionsPlist /tmp/export-options.plist \
+            -exportPath safari-build/export
+
+      - name: Build Safari Xcode project (unsigned)
+        if: steps.signing.outputs.sign != 'true'
+        env:
+          PROJECT_DIR: ${{ steps.convert.outputs.project_dir }}
+        run: |
+          xcodebuild \
+            -project "$PROJECT_DIR" \
+            -scheme "where it's at" \
+            -configuration Release \
+            -derivedDataPath safari-build/derived \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+          mkdir -p safari-build/export
+          APP=$(find safari-build/derived/Build/Products/Release -maxdepth 2 -name "*.app" -type d | head -n 1)
+          if [ -z "$APP" ]; then
+            echo "Could not locate built .app"
+            exit 1
+          fi
+          cp -R "$APP" safari-build/export/
+
+      - name: Notarize and staple
+        if: steps.signing.outputs.notarize == 'true'
+        env:
+          KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPLE_NOTARY_KEY_ISSUER_ID }}
+          KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
+        run: |
+          APP=$(find safari-build/export -maxdepth 2 -name "*.app" -type d | head -n 1)
+          if [ -z "$APP" ]; then
+            echo "Could not locate exported .app"
+            exit 1
+          fi
+          echo "$KEY_P8_BASE64" | base64 --decode > /tmp/AuthKey.p8
+          ditto -c -k --keepParent "$APP" /tmp/notarize.zip
+          xcrun notarytool submit /tmp/notarize.zip \
+            --key /tmp/AuthKey.p8 \
+            --key-id "$KEY_ID" \
+            --issuer "$ISSUER_ID" \
+            --wait
+          rm /tmp/AuthKey.p8 /tmp/notarize.zip
+          xcrun stapler staple "$APP"
+
+      - name: Package Safari .app for release
+        run: |
+          APP=$(find safari-build/export -maxdepth 2 -name "*.app" -type d | head -n 1)
+          mkdir -p dist
+          ditto -c -k --keepParent "$APP" "dist/where-its-at-${VERSION}-safari.zip"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: safari
+          path: dist/where-its-at-*-safari.zip
+
+  publish:
+    name: Publish GitHub Release
+    needs: [chromium-firefox, safari]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - run: ls -la release-artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-artifacts/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
