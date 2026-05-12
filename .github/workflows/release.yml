@@ -142,6 +142,19 @@ jobs:
           fi
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
+          # Override the generated ViewController.swift so the
+          # "Open Safari Extension Preferences" button surfaces failures
+          # instead of silently doing nothing (most commonly when the host
+          # app isn't installed in /Applications).
+          TARGET_SWIFT=$(grep -rl "showPreferencesForExtension" safari-build --include="*.swift" | head -n 1)
+          if [ -z "$TARGET_SWIFT" ]; then
+            echo "Could not locate generated ViewController.swift to override"
+            find safari-build -name "*.swift"
+            exit 1
+          fi
+          cp safari/ViewController.swift "$TARGET_SWIFT"
+          echo "Overrode $TARGET_SWIFT"
+
           SCHEMES_JSON=$(xcodebuild -list -project "$PROJECT_DIR" -json)
           SCHEME=$(echo "$SCHEMES_JSON" | jq -r '.project.schemes[] | select(test("macOS"; "i"))' | head -n 1)
           if [ -z "$SCHEME" ]; then
