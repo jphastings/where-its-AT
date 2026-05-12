@@ -106,20 +106,47 @@ function ensureStyle(): void {
   (document.head ?? document.documentElement).appendChild(style);
 }
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function svgEl<K extends keyof SVGElementTagNameMap>(
+  tag: K,
+  attrs: Record<string, string | number> = {},
+): SVGElementTagNameMap[K] {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    el.setAttribute(key, String(value));
+  }
+  return el;
+}
+
 function createOverlay(): HTMLDivElement {
   const overlay = document.createElement("div");
   overlay.id = OVERLAY_ID;
-  overlay.innerHTML = `
-    <svg width="100%" height="100%" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <mask id="__wia-mask" maskUnits="userSpaceOnUse">
-          <rect x="0" y="0" width="100%" height="100%" fill="white"/>
-          <g id="__wia-cutouts"></g>
-        </mask>
-      </defs>
-      <rect x="0" y="0" width="100%" height="100%" fill="var(--wia-overlay-color)" mask="url(#__wia-mask)"/>
-    </svg>
-  `;
+
+  const svg = svgEl("svg", {
+    width: "100%",
+    height: "100%",
+    preserveAspectRatio: "none",
+  });
+  const defs = svgEl("defs");
+  const mask = svgEl("mask", { id: "__wia-mask", maskUnits: "userSpaceOnUse" });
+  mask.appendChild(
+    svgEl("rect", { x: 0, y: 0, width: "100%", height: "100%", fill: "white" }),
+  );
+  mask.appendChild(svgEl("g", { id: "__wia-cutouts" }));
+  defs.appendChild(mask);
+  svg.appendChild(defs);
+  svg.appendChild(
+    svgEl("rect", {
+      x: 0,
+      y: 0,
+      width: "100%",
+      height: "100%",
+      fill: "var(--wia-overlay-color)",
+      mask: "url(#__wia-mask)",
+    }),
+  );
+  overlay.appendChild(svg);
   return overlay;
 }
 
@@ -154,12 +181,13 @@ function updateLayout(): void {
   const zonesEl = STATE.zones;
   if (!cutouts) return;
 
-  // Remove old zones; rebuild fresh each pass keeps DOM order tied to items.
+  // Rebuild zones and cutouts fresh each pass — keeps DOM order tied to items
+  // and avoids reconciling per-element state.
   while (zonesEl.firstChild) zonesEl.removeChild(zonesEl.firstChild);
+  while (cutouts.firstChild) cutouts.removeChild(cutouts.firstChild);
 
   const PADDING = 4;
   const RADIUS = 6;
-  const fragments: string[] = [];
 
   STATE.items.forEach((item, index) => {
     const rect = item.el.getBoundingClientRect();
@@ -170,8 +198,16 @@ function updateLayout(): void {
     const w = rect.width + PADDING * 2;
     const h = rect.height + PADDING * 2;
 
-    fragments.push(
-      `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${RADIUS}" ry="${RADIUS}" fill="black"/>`,
+    cutouts.appendChild(
+      svgEl("rect", {
+        x,
+        y,
+        width: w,
+        height: h,
+        rx: RADIUS,
+        ry: RADIUS,
+        fill: "black",
+      }),
     );
 
     const zone = document.createElement("div");
@@ -185,8 +221,6 @@ function updateLayout(): void {
     zone.style.borderRadius = `${RADIUS}px`;
     zonesEl.appendChild(zone);
   });
-
-  cutouts.innerHTML = fragments.join("");
 }
 
 function positionTooltip(zone: HTMLDivElement): void {

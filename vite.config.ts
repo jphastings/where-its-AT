@@ -63,7 +63,7 @@ function buildManifest(browser: Browser): Record<string, unknown> {
     base.browser_specific_settings = {
       gecko: {
         id: "where-its-at@byjp.me",
-        strict_min_version: "121.0",
+        strict_min_version: "142.0",
         data_collection_permissions: { required: ["none"] },
       },
     };
