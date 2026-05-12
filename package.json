@@ -2,6 +2,7 @@
   "name": "where-its-at",
   "version": "0.4.8",
   "description": "Browser extension that highlights atproto references on the current page.",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {
