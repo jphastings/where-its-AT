@@ -337,31 +337,4 @@ chrome.tabs.onUpdated.addListener((tabId, info) => {
   }
 });
 
-// After install or extension reload, content scripts that were already running
-// in open tabs are orphaned (their chrome.runtime context has been invalidated),
-// so they can no longer send us scan results. Inject a fresh copy into every
-// eligible existing tab so the icon updates without needing a page reload.
-async function reinjectExistingTabs(): Promise<void> {
-  const allTabs = await chrome.tabs.query({});
-  await Promise.all(
-    allTabs.map(async (tab) => {
-      if (typeof tab.id !== "number" || !tab.url) return;
-      if (!/^https?:|^file:/.test(tab.url)) return;
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id, allFrames: false },
-          files: ["src/content.js"],
-        });
-      } catch {
-        // Some pages (chrome.google.com/webstore, view-source:, the Web Store,
-        // PDF viewer, etc.) refuse injection; that's expected.
-      }
-    }),
-  );
-}
-
-chrome.runtime.onInstalled.addListener(() => {
-  void reinjectExistingTabs();
-});
-
 void setupContextMenus();

@@ -16,7 +16,7 @@ function buildManifest(browser: Browser): Record<string, unknown> {
     name: "Where it's AT",
     version: pkg.version,
     description: pkg.description,
-    permissions: ["scripting", "storage", "clipboardWrite", "contextMenus"],
+    permissions: ["storage", "clipboardWrite", "contextMenus"],
     host_permissions: ["<all_urls>"],
     options_ui: {
       page: "src/options.html",
