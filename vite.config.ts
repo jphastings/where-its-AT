@@ -28,10 +28,10 @@ function buildManifest(browser: Browser): Record<string, unknown> {
       default_title: "where it's at — reveal atproto references",
     },
     icons: {
-      "16": "icons/inactive-16.png",
-      "32": "icons/inactive-32.png",
-      "48": "icons/inactive-48.png",
-      "128": "icons/inactive-128.png",
+      "16": "icons/detected-16.png",
+      "32": "icons/detected-32.png",
+      "48": "icons/detected-48.png",
+      "128": "icons/detected-128.png",
     },
     content_scripts: [
       {
