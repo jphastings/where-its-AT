@@ -1,6 +1,6 @@
 {
   "name": "where-its-at",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Browser extension that highlights atproto references on the current page.",
   "private": true,
   "type": "module",

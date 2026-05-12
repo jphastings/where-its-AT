@@ -216,25 +216,16 @@ jobs:
             CODE_SIGN_IDENTITY="Developer ID Application" \
             archive
 
-          cat > /tmp/export-options.plist <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>developer-id</string>
-            <key>teamID</key>
-            <string>${TEAM_ID}</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-          </dict>
-          </plist>
-          EOF
-
-          xcodebuild -exportArchive \
-            -archivePath safari-build/where-its-at.xcarchive \
-            -exportOptionsPlist /tmp/export-options.plist \
-            -exportPath safari-build/export
+          # `xcodebuild -exportArchive` segfaults on macos-14 runners. For a
+          # Developer ID distribution it only copies the already-signed .app
+          # out of the xcarchive, so we do that ourselves.
+          mkdir -p safari-build/export
+          APP=$(find safari-build/where-its-at.xcarchive/Products/Applications -maxdepth 1 -name "*.app" -type d | head -n 1)
+          if [ -z "$APP" ]; then
+            echo "Could not locate signed .app inside xcarchive"
+            exit 1
+          fi
+          cp -R "$APP" safari-build/export/
 
       - name: Build Safari Xcode project (unsigned)
         if: steps.signing.outputs.sign != 'true'
