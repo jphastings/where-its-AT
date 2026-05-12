@@ -381,8 +381,6 @@ const OVERLAY_CSS = `
     position: absolute;
     pointer-events: auto;
     cursor: pointer;
-    box-shadow: 0 0 0 0 rgba(0, 133, 255, 0);
-    transition: box-shadow 120ms ease;
   }
   .__wia-zone--hover {
     box-shadow:
