@@ -142,6 +142,19 @@ jobs:
           fi
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
+          SCHEMES_JSON=$(xcodebuild -list -project "$PROJECT_DIR" -json)
+          SCHEME=$(echo "$SCHEMES_JSON" | jq -r '.project.schemes[] | select(test("macOS"; "i"))' | head -n 1)
+          if [ -z "$SCHEME" ]; then
+            SCHEME=$(echo "$SCHEMES_JSON" | jq -r '.project.schemes[0]')
+          fi
+          if [ -z "$SCHEME" ] || [ "$SCHEME" = "null" ]; then
+            echo "Could not determine an Xcode scheme to build"
+            echo "$SCHEMES_JSON"
+            exit 1
+          fi
+          echo "Using scheme: $SCHEME"
+          echo "scheme=$SCHEME" >> "$GITHUB_OUTPUT"
+
       - name: Determine signing path
         id: signing
         env:
@@ -189,11 +202,12 @@ jobs:
         if: steps.signing.outputs.sign == 'true'
         env:
           PROJECT_DIR: ${{ steps.convert.outputs.project_dir }}
+          SCHEME: ${{ steps.convert.outputs.scheme }}
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           xcodebuild \
             -project "$PROJECT_DIR" \
-            -scheme "where it's at" \
+            -scheme "$SCHEME" \
             -configuration Release \
             -derivedDataPath safari-build/derived \
             -archivePath safari-build/where-its-at.xcarchive \
@@ -226,10 +240,11 @@ jobs:
         if: steps.signing.outputs.sign != 'true'
         env:
           PROJECT_DIR: ${{ steps.convert.outputs.project_dir }}
+          SCHEME: ${{ steps.convert.outputs.scheme }}
         run: |
           xcodebuild \
             -project "$PROJECT_DIR" \
-            -scheme "where it's at" \
+            -scheme "$SCHEME" \
             -configuration Release \
             -derivedDataPath safari-build/derived \
             CODE_SIGNING_ALLOWED=NO \
