@@ -13,6 +13,7 @@ interface State {
   overlay: HTMLDivElement | null;
   zones: HTMLDivElement | null;
   tooltip: HTMLDivElement | null;
+  notice: HTMLDivElement | null;
   hoveredZone: HTMLDivElement | null;
 }
 
@@ -22,12 +23,14 @@ const STATE: State = {
   overlay: null,
   zones: null,
   tooltip: null,
+  notice: null,
   hoveredZone: null,
 };
 
 const OVERLAY_ID = "__wia-overlay";
 const ZONES_ID = "__wia-zones";
 const TOOLTIP_ID = "__wia-tooltip";
+const NOTICE_ID = "__wia-notice";
 const STYLE_ID = "__wia-style";
 
 const SELECTORS = [
@@ -131,6 +134,13 @@ function createTooltip(): HTMLDivElement {
   tooltip.id = TOOLTIP_ID;
   tooltip.hidden = true;
   return tooltip;
+}
+
+function createNotice(): HTMLDivElement {
+  const notice = document.createElement("div");
+  notice.id = NOTICE_ID;
+  notice.textContent = "Press ESC to leave AT-mode";
+  return notice;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -311,9 +321,11 @@ function activate(): void {
   STATE.overlay = createOverlay();
   STATE.zones = createZones();
   STATE.tooltip = createTooltip();
+  STATE.notice = createNotice();
   document.documentElement.appendChild(STATE.overlay);
   document.documentElement.appendChild(STATE.zones);
   document.documentElement.appendChild(STATE.tooltip);
+  document.documentElement.appendChild(STATE.notice);
 
   STATE.zones.addEventListener("mouseover", onZoneMouseOver);
   STATE.zones.addEventListener("mouseout", onZoneMouseOut);
@@ -331,9 +343,11 @@ function deactivate(): void {
   STATE.overlay?.remove();
   STATE.zones?.remove();
   STATE.tooltip?.remove();
+  STATE.notice?.remove();
   STATE.overlay = null;
   STATE.zones = null;
   STATE.tooltip = null;
+  STATE.notice = null;
   STATE.hoveredZone = null;
   window.removeEventListener("scroll", scheduleLayout, true);
   window.removeEventListener("resize", scheduleLayout);
@@ -495,6 +509,19 @@ const OVERLAY_CSS = `
     pointer-events: none;
     max-width: min(60vw, 480px);
     word-break: break-all;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  }
+  #${NOTICE_ID} {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 2147483642;
+    background: #0085ff;
+    color: white;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    pointer-events: none;
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   }
 `;
