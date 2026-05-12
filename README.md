@@ -57,13 +57,22 @@ Load unpacked:
 
 ## Releases
 
-`.github/workflows/release.yml` runs on every `v*` tag push (e.g. `git tag v0.2.0 && git push --tags`) and publishes a GitHub Release containing:
+`.github/workflows/release.yml` watches `main` for changes to `package.json`. When the `version` field changes, it builds all three browsers and publishes a GitHub Release. It also creates the corresponding `v<version>` git tag during the release. There's also a `workflow_dispatch` manual trigger with a `force` input for re-running on the current `main` HEAD without bumping the version.
+
+Releasing is just:
+
+```sh
+npm version patch        # or minor / major
+git push origin main
+```
+
+The release contains:
 
 - `where-its-at-<version>-chrome.zip` — load via `chrome://extensions` → Load unpacked
 - `where-its-at-<version>-firefox.xpi` — load via `about:debugging` (unsigned; for AMO distribution we'd add `web-ext sign`)
 - `where-its-at-<version>-safari.zip` — contains the host `.app` bundle for Safari
 
-The workflow aligns `package.json` and the built manifest version to the git tag automatically, so you only have to bump the tag.
+If a release already exists for the current version, the workflow no-ops, so re-pushing `main` is safe.
 
 ### Safari signing + notarization secrets
 

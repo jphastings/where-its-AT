@@ -2,16 +2,71 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths: [package.json]
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Force release of the current package.json version"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 jobs:
+  check:
+    name: Check version bump
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.check.outputs.release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 2
+
+      - id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          VERSION=$(jq -r .version package.json)
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "::error::Could not read version from package.json"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          if [ "$FORCE" = "true" ]; then
+            echo "::notice::Forcing release of v$VERSION"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PREVIOUS=$(git show HEAD^:package.json 2>/dev/null | jq -r .version 2>/dev/null || echo "")
+          if [ "$VERSION" = "$PREVIOUS" ]; then
+            echo "::notice::package.json version unchanged ($VERSION); skipping release"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::notice::Release v$VERSION already exists; skipping"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "::notice::Releasing v$VERSION (was ${PREVIOUS:-none})"
+          echo "release=true" >> "$GITHUB_OUTPUT"
+
   chromium-firefox:
     name: Build Chrome & Firefox
+    needs: check
+    if: needs.check.outputs.release == 'true'
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -25,13 +80,6 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-
-      - name: Align package.json version with tag
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "Using version $VERSION"
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - run: pnpm typecheck
 
@@ -53,7 +101,11 @@ jobs:
 
   safari:
     name: Build & sign Safari extension
+    needs: check
+    if: needs.check.outputs.release == 'true'
     runs-on: macos-14
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -67,12 +119,6 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-
-      - name: Align package.json version with tag
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - run: pnpm build:chrome
 
@@ -237,7 +283,8 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    needs: [chromium-firefox, safari]
+    needs: [check, chromium-firefox, safari]
+    if: needs.check.outputs.release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -255,6 +302,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ needs.check.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: v${{ needs.check.outputs.version }}
           files: release-artifacts/*
           generate_release_notes: true
           fail_on_unmatched_files: true
