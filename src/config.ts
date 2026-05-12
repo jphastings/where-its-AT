@@ -37,6 +37,25 @@ export type ResolvedAction =
   | { kind: "url"; url: string }
   | { kind: "copy"; uri: string };
 
+export function visitLabel(action: ClickAction): string | null {
+  switch (action.kind) {
+    case "copy":
+      return null;
+    case "pdsls":
+      return "Visit PDSls";
+    case "taproot":
+      return "Visit Taproot";
+    case "custom": {
+      try {
+        const url = new URL(action.template.split(PLACEHOLDER).join("x"));
+        return `Visit ${url.hostname.replace(/^www\./, "")}`;
+      } catch {
+        return "Visit link";
+      }
+    }
+  }
+}
+
 export function resolveAction(action: ClickAction, uri: string): ResolvedAction {
   switch (action.kind) {
     case "copy":

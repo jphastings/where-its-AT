@@ -1,5 +1,7 @@
 /// <reference types="chrome" />
 
+import { loadAction, resolveAction, visitLabel } from "./config";
+
 interface TabState {
   detected: boolean;
   count: number;
@@ -7,6 +9,24 @@ interface TabState {
 }
 
 const tabs = new Map<number, TabState>();
+
+const MENU_PARENT_ID = "wia-parent";
+const MENU_VISIT_ID = "wia-visit";
+const MENU_COPY_ID = "wia-copy";
+const MENU_CONTEXTS: chrome.contextMenus.ContextType[] = [
+  "page",
+  "link",
+  "selection",
+  "image",
+  "video",
+  "audio",
+];
+
+let currentAtUri: string | null = null;
+let currentVisitUrl: string | null = null;
+let currentTabId: number | null = null;
+let clickedListenerRegistered = false;
+let shownListenerRegistered = false;
 
 const ICONS = {
   inactive: {
@@ -114,6 +134,134 @@ async function refresh(tabId: number): Promise<void> {
   }
 }
 
+// Chrome exposes the API as chrome.contextMenus; Firefox exposes it as
+// chrome.menus (the canonical WebExtensions name). We grab whichever exists
+// so the rest of the file can be browser-agnostic. Both browsers share the
+// same shape for the calls we use (create/update/removeAll/onClicked).
+type MenusApi = typeof chrome.contextMenus & {
+  refresh?: () => void;
+  onShown?: chrome.events.Event<() => void>;
+};
+const menusApi: MenusApi | undefined =
+  (chrome.contextMenus as MenusApi | undefined) ??
+  (chrome as unknown as { menus?: MenusApi }).menus;
+
+// Firefox-only; refresh re-renders an open menu so updates made inside the
+// onShown handler appear in the current display.
+function refreshMenu(): void {
+  if (!menusApi?.refresh) return;
+  try {
+    menusApi.refresh();
+  } catch {
+    // ignore
+  }
+}
+
+function onContextMenuClicked(info: chrome.contextMenus.OnClickData): void {
+  if (info.menuItemId === MENU_COPY_ID) {
+    if (currentAtUri && currentTabId != null) {
+      void chrome.tabs
+        .sendMessage(currentTabId, { type: "copy-uri", uri: currentAtUri })
+        .catch(() => undefined);
+    }
+    return;
+  }
+  if (info.menuItemId === MENU_VISIT_ID) {
+    if (currentVisitUrl) {
+      void chrome.tabs.create({ url: currentVisitUrl, active: true });
+    }
+  }
+}
+
+async function setupContextMenus(): Promise<void> {
+  if (!menusApi) return;
+  // Chrome auto-groups multiple items from one extension under a submenu
+  // named after the extension, with the extension's icon next to it. Firefox
+  // doesn't auto-group, so we create the parent ourselves. Doing it
+  // unconditionally gives both browsers the same shape ("Where it's AT" →
+  // Visit … / Copy …). Firefox additionally supports a per-item `icons` key
+  // (Chrome's type forbids it), which we set on the parent only.
+  const parentIcons: { icons?: Record<string, string> } = menusApi.onShown
+    ? { icons: { "16": "icons/detected-16.png", "32": "icons/detected-32.png" } }
+    : {};
+  try {
+    await new Promise<void>((resolve) => menusApi.removeAll(resolve));
+    menusApi.create({
+      id: MENU_PARENT_ID,
+      title: "Where it's AT",
+      contexts: MENU_CONTEXTS,
+      visible: false,
+      ...parentIcons,
+    });
+    menusApi.create({
+      id: MENU_VISIT_ID,
+      parentId: MENU_PARENT_ID,
+      title: "Visit",
+      contexts: MENU_CONTEXTS,
+      visible: false,
+    });
+    menusApi.create({
+      id: MENU_COPY_ID,
+      parentId: MENU_PARENT_ID,
+      title: "Copy AT URI",
+      contexts: MENU_CONTEXTS,
+      visible: false,
+    });
+  } catch (err) {
+    console.warn("[where-its-at] setupContextMenus failed:", err);
+    return;
+  }
+  if (!clickedListenerRegistered) {
+    menusApi.onClicked.addListener(onContextMenuClicked);
+    clickedListenerRegistered = true;
+  }
+  // Firefox exposes menus.onShown so we can refresh the menu just before it
+  // displays — belt-and-braces against the async-update race on first show.
+  if (menusApi.onShown && !shownListenerRegistered) {
+    menusApi.onShown.addListener(refreshMenu);
+    shownListenerRegistered = true;
+  }
+}
+
+async function applyContextTarget(
+  atUri: string | null,
+  tabId: number | null,
+): Promise<void> {
+  if (!menusApi) return;
+  try {
+    if (!atUri) {
+      currentAtUri = null;
+      currentVisitUrl = null;
+      currentTabId = null;
+      menusApi.update(MENU_PARENT_ID, { visible: false });
+      menusApi.update(MENU_VISIT_ID, { visible: false });
+      menusApi.update(MENU_COPY_ID, { visible: false });
+      refreshMenu();
+      return;
+    }
+    const action = await loadAction();
+    const resolved = resolveAction(action, atUri);
+    const label = visitLabel(action);
+    currentAtUri = atUri;
+    currentTabId = tabId;
+    menusApi.update(MENU_PARENT_ID, { visible: true });
+    if (resolved.kind === "url") {
+      currentVisitUrl = resolved.url;
+      menusApi.update(MENU_VISIT_ID, {
+        visible: true,
+        title: label ?? "Visit",
+      });
+    } else {
+      currentVisitUrl = null;
+      menusApi.update(MENU_VISIT_ID, { visible: false });
+    }
+    menusApi.update(MENU_COPY_ID, { visible: true });
+    refreshMenu();
+  } catch (err) {
+    console.warn("[where-its-at] applyContextTarget failed:", err);
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const tabId = sender.tab?.id;
   if (typeof tabId !== "number") {
@@ -143,6 +291,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .sendMessage(tabId, { type: "deactivate" })
       .catch(() => undefined);
     void refresh(tabId);
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (message?.type === "context-target") {
+    const atUri = typeof message.atUri === "string" ? message.atUri : null;
+    void applyContextTarget(atUri, tabId);
     sendResponse({ ok: true });
     return false;
   }
@@ -208,3 +363,5 @@ async function reinjectExistingTabs(): Promise<void> {
 chrome.runtime.onInstalled.addListener(() => {
   void reinjectExistingTabs();
 });
+
+void setupContextMenus();

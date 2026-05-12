@@ -37,6 +37,12 @@ const SELECTORS = [
   '[href^="at://"]',
 ];
 
+const SELECTOR_ANY = SELECTORS.join(",");
+const CONTEXT_TARGET_SELECTOR = `.__wia-zone, ${SELECTOR_ANY}`;
+
+let contextListenersAttached = false;
+let lastSentAtUri: string | null | undefined = undefined;
+
 function deriveAtUri(el: Element): string | null {
   const resource = el.getAttribute("resource");
   const href = el.getAttribute("href");
@@ -294,6 +300,7 @@ function activate(): void {
   if (STATE.active) return;
   clearTimeout(scanTimer);
   STATE.items = findItems();
+  syncContextListeners();
   if (STATE.items.length === 0) {
     sendScanResult(0);
     return;
@@ -333,6 +340,52 @@ function deactivate(): void {
   window.removeEventListener("keydown", onKeyDown, true);
 }
 
+function resolveAtUriFromEvent(event: Event): string | null {
+  const target = event.target as Element | null;
+  if (!target) return null;
+  const matched = target.closest?.(CONTEXT_TARGET_SELECTOR) as HTMLElement | null;
+  if (!matched) return null;
+  if (matched.classList.contains("__wia-zone")) {
+    return matched.dataset.uri ?? null;
+  }
+  return deriveAtUri(matched);
+}
+
+function sendContextTarget(atUri: string | null): void {
+  if (atUri === lastSentAtUri) return;
+  lastSentAtUri = atUri;
+  try {
+    chrome.runtime
+      .sendMessage({ type: "context-target", atUri })
+      .catch(() => undefined);
+  } catch {
+    // Runtime invalidated (extension reloaded); ignore.
+  }
+}
+
+function onContextMouseOver(event: MouseEvent): void {
+  sendContextTarget(resolveAtUriFromEvent(event));
+}
+
+function onContextMouseDown(event: MouseEvent): void {
+  if (event.button !== 2) return;
+  sendContextTarget(resolveAtUriFromEvent(event));
+}
+
+function syncContextListeners(): void {
+  const wanted = STATE.items.length > 0;
+  if (wanted && !contextListenersAttached) {
+    document.addEventListener("mouseover", onContextMouseOver, true);
+    document.addEventListener("mousedown", onContextMouseDown, true);
+    contextListenersAttached = true;
+  } else if (!wanted && contextListenersAttached) {
+    document.removeEventListener("mouseover", onContextMouseOver, true);
+    document.removeEventListener("mousedown", onContextMouseDown, true);
+    contextListenersAttached = false;
+    lastSentAtUri = undefined;
+  }
+}
+
 let scanTimer: ReturnType<typeof setTimeout> | undefined;
 function scheduleScan(): void {
   // While the overlay is engaged we rebuild zone divs on every layout pass,
@@ -345,6 +398,7 @@ function scheduleScan(): void {
   scanTimer = setTimeout(() => {
     const items = findItems();
     STATE.items = items;
+    syncContextListeners();
     sendScanResult(items.length);
   }, 400);
 }
@@ -357,6 +411,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   if (message?.type === "deactivate") {
     deactivate();
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (message?.type === "copy-uri" && typeof message.uri === "string") {
+    void (async () => {
+      try {
+        await navigator.clipboard.writeText(message.uri);
+        if (STATE.active && STATE.tooltip) flashTooltip("Copied!", 900);
+      } catch (err) {
+        console.warn("[where-its-at] context-menu clipboard write failed:", err);
+        if (STATE.active && STATE.tooltip) flashTooltip("Copy failed", 1200);
+      }
+    })();
     sendResponse({ ok: true });
     return false;
   }
@@ -373,6 +440,7 @@ observer.observe(document.documentElement, {
 
 // Initial scan
 STATE.items = findItems();
+syncContextListeners();
 sendScanResult(STATE.items.length);
 
 // CSS is injected via JS (rather than declared as a manifest content_script CSS file)

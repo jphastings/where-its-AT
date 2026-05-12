@@ -16,7 +16,7 @@ function buildManifest(browser: Browser): Record<string, unknown> {
     name: "Where it's AT",
     version: pkg.version,
     description: pkg.description,
-    permissions: ["scripting", "storage", "clipboardWrite"],
+    permissions: ["scripting", "storage", "clipboardWrite", "contextMenus"],
     host_permissions: ["<all_urls>"],
     options_ui: {
       page: "src/options.html",
@@ -56,6 +56,10 @@ function buildManifest(browser: Browser): Record<string, unknown> {
     base.background = { service_worker: "src/background.ts", type: "module" };
   } else {
     base.background = { scripts: ["src/background.ts"], type: "module" };
+    // Firefox's canonical name for the contextMenus permission is "menus";
+    // "contextMenus" is a Chrome-only spelling. Swap it for the Firefox build.
+    const perms = base.permissions as string[];
+    base.permissions = perms.map((p) => (p === "contextMenus" ? "menus" : p));
     base.browser_specific_settings = {
       gecko: {
         id: "where-its-at@byjp.me",
