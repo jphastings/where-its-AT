@@ -10,6 +10,21 @@ A browser extension (Firefox, Chrome, Safari) which highlights elements on webpa
 
 You can see a page with these RDFa tags on my [atproto Slay the Spire 2 app](https://sts2.byjp.me/did:plc:ephkzpinhaqcabtkugtbzrwu).
 
+## Screenshots
+
+In "AT-mode" non-tagged elements are faded out, and hovering over a tagged element highlights it and shows the AT URI. Clicking will perform your chosen action.
+![A screenshot showing AT-mode enabled; an element has a blue border around it, with an AT URI shown above it.](./docs/at-mode-enabled.png)
+
+---
+
+There's a handy context menu, which lets you visit your chosen destination, or copy the AT URI directly.
+![A browser right-click context menu showing "Visit PDSls" and "Copy AT URI".](./docs/context-menu.png)
+
+---
+
+The extension's options let you choose what clicking does. By default it visits [PDSls](https://pds.ls), but [Taproot](https://atproto.at/), your own website, or just copying the AT URI can be configured.
+![The options page, listing the choices for what to do when you click on a tagged element in At-mode.](./docs/options.png)
+
 ## What it does
 
 - The toolbar icon shows a struck-through `@` by default. When any atproto reference is detected on the page it switches to a solid blue `@`.
