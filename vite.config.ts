@@ -16,8 +16,12 @@ function buildManifest(browser: Browser): Record<string, unknown> {
     name: "where it's at",
     version: pkg.version,
     description: pkg.description,
-    permissions: ["scripting"],
+    permissions: ["scripting", "storage", "clipboardWrite"],
     host_permissions: ["<all_urls>"],
+    options_ui: {
+      page: "src/options.html",
+      open_in_tab: true,
+    },
     action: {
       default_icon: {
         "16": "icons/inactive-16.png",

@@ -135,12 +135,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
-  if (message?.type === "open" && typeof message.uri === "string") {
-    console.log(`${TAG} open uri=${message.uri}`);
-    void chrome.tabs.create({
-      url: `https://pdsls.dev/${message.uri}`,
-      active: true,
-    });
+  if (message?.type === "open" && typeof message.url === "string") {
+    console.log(`${TAG} open url=${message.url}`);
+    void chrome.tabs.create({ url: message.url, active: true });
     sendResponse({ ok: true });
     return false;
   }

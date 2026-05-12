@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>where it's at — options</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --accent: #0085ff;
+        --bg: #ffffff;
+        --fg: #1a1a1a;
+        --muted: #6b7280;
+        --border: rgba(0, 0, 0, 0.12);
+        --field-bg: #f7f7f8;
+        --error: #c0392b;
+        --success: #15803d;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #161618;
+          --fg: #f0f0f0;
+          --muted: #9ca3af;
+          --border: rgba(255, 255, 255, 0.14);
+          --field-bg: #1f1f22;
+          --error: #ff7a6b;
+          --success: #4ade80;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 32px 24px;
+        font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        color: var(--fg);
+        background: var(--bg);
+      }
+      main {
+        max-width: 480px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0 0 4px;
+      }
+      .lede {
+        color: var(--muted);
+        margin: 0 0 24px;
+      }
+      fieldset {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 8px 0;
+        margin: 0;
+      }
+      legend {
+        padding: 0 6px;
+        margin-left: 8px;
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      label.option {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 16px;
+        cursor: pointer;
+        border-radius: 6px;
+      }
+      label.option:hover {
+        background: var(--field-bg);
+      }
+      label.option input[type="radio"] {
+        margin: 2px 0 0;
+        accent-color: var(--accent);
+      }
+      .option-body { display: flex; flex-direction: column; gap: 2px; }
+      .option-title { font-weight: 500; }
+      .option-meta { color: var(--muted); font-size: 12px; }
+      code {
+        font: 12px/1.4 ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+        background: var(--field-bg);
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
+      .custom-input {
+        margin: 0 16px 4px 38px;
+        display: none;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .custom-input.shown { display: flex; }
+      .custom-input input {
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--field-bg);
+        color: var(--fg);
+        font: inherit;
+      }
+      .custom-input input:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: -1px;
+        border-color: transparent;
+      }
+      .hint, .error {
+        font-size: 12px;
+        min-height: 1em;
+      }
+      .hint { color: var(--muted); }
+      .error { color: var(--error); }
+      #status {
+        margin-top: 16px;
+        font-size: 12px;
+        color: var(--success);
+        min-height: 1em;
+        opacity: 0;
+        transition: opacity 200ms ease;
+      }
+      #status.shown { opacity: 1; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>where it's at</h1>
+      <p class="lede">What should happen when you click a highlighted reference?</p>
+
+      <fieldset>
+        <legend>Click action</legend>
+        <label class="option">
+          <input type="radio" name="action" value="pdsls" />
+          <span class="option-body">
+            <span class="option-title">Visit PDSls</span>
+            <span class="option-meta">pdsls.dev/&lt;at-uri&gt;</span>
+          </span>
+        </label>
+        <label class="option">
+          <input type="radio" name="action" value="taproot" />
+          <span class="option-body">
+            <span class="option-title">Visit Taproot</span>
+            <span class="option-meta">atproto.at/uri/&lt;at-uri&gt;</span>
+          </span>
+        </label>
+        <label class="option">
+          <input type="radio" name="action" value="copy" />
+          <span class="option-body">
+            <span class="option-title">Copy AT URI to clipboard</span>
+          </span>
+        </label>
+        <label class="option">
+          <input type="radio" name="action" value="custom" />
+          <span class="option-body">
+            <span class="option-title">Visit custom URL</span>
+            <span class="option-meta">use <code>{at-uri}</code> as a placeholder</span>
+          </span>
+        </label>
+        <div class="custom-input" id="custom-input">
+          <input
+            type="text"
+            id="template"
+            placeholder="https://example.com/?ref={at-uri}"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <span class="error" id="custom-error"></span>
+        </div>
+      </fieldset>
+
+      <div id="status" role="status" aria-live="polite">Saved</div>
+    </main>
+    <script type="module" src="./options.ts"></script>
+  </body>
+</html>

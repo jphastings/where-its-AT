@@ -1,5 +1,7 @@
 /// <reference types="chrome" />
 
+import { loadAction, resolveAction } from "./config";
+
 interface DetectedItem {
   el: Element;
   atUri: string;
@@ -228,6 +230,21 @@ function onZoneMouseOut(event: MouseEvent): void {
   hideTooltip();
 }
 
+function flashTooltip(message: string, durationMs: number): void {
+  const tooltip = STATE.tooltip;
+  if (!tooltip) return;
+  const previous = tooltip.textContent;
+  tooltip.textContent = message;
+  setTimeout(() => {
+    if (!STATE.tooltip) return;
+    if (STATE.hoveredZone) {
+      STATE.tooltip.textContent = STATE.hoveredZone.dataset.uri ?? previous ?? "";
+    } else {
+      hideTooltip();
+    }
+  }, durationMs);
+}
+
 function onZoneClick(event: MouseEvent): void {
   const target = (event.target as HTMLElement | null)?.closest<HTMLDivElement>(
     ".__wia-zone",
@@ -237,9 +254,24 @@ function onZoneClick(event: MouseEvent): void {
   event.stopPropagation();
   const uri = target.dataset.uri;
   if (!uri) return;
-  void chrome.runtime
-    .sendMessage({ type: "open", uri })
-    .catch(() => undefined);
+
+  void (async () => {
+    const action = await loadAction();
+    const resolved = resolveAction(action, uri);
+    if (resolved.kind === "copy") {
+      try {
+        await navigator.clipboard.writeText(resolved.uri);
+        flashTooltip("Copied!", 900);
+      } catch (err) {
+        console.warn("[where-its-at] clipboard write failed:", err);
+        flashTooltip("Copy failed", 1200);
+      }
+      return;
+    }
+    void chrome.runtime
+      .sendMessage({ type: "open", url: resolved.url })
+      .catch(() => undefined);
+  })();
 }
 
 function onKeyDown(event: KeyboardEvent): void {
