@@ -16,6 +16,8 @@ function buildManifest(browser: Browser): Record<string, unknown> {
     name: "where it's at",
     version: pkg.version,
     description: pkg.description,
+    permissions: ["scripting"],
+    host_permissions: ["<all_urls>"],
     action: {
       default_icon: {
         "16": "icons/inactive-16.png",

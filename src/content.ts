@@ -72,12 +72,22 @@ function findItems(): DetectedItem[] {
 }
 
 function sendScanResult(count: number): void {
+  console.log(`[where-its-at] content scan: ${count} reference(s)`);
   try {
-    void chrome.runtime
+    chrome.runtime
       .sendMessage({ type: "scan-result", count })
-      .catch(() => undefined);
-  } catch {
-    // The extension may have been reloaded; ignore.
+      .then((response) => {
+        console.log(`[where-its-at] background ack:`, response);
+      })
+      .catch((err) => {
+        console.warn(
+          "[where-its-at] sendMessage rejected — background never replied:",
+          err,
+        );
+      });
+  } catch (err) {
+    // The extension may have been reloaded; the runtime is then invalidated.
+    console.warn("[where-its-at] sendMessage threw:", err);
   }
 }
 
