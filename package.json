@@ -1,0 +1,28 @@
+{
+  "name": "where-its-at",
+  "version": "0.1.0",
+  "description": "Browser extension that highlights atproto references on the current page.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "icons": "tsx scripts/generate-icons.ts",
+    "build": "pnpm icons && pnpm build:chrome && pnpm build:firefox",
+    "build:chrome": "vite build --mode chrome",
+    "build:firefox": "vite build --mode firefox",
+    "dev": "pnpm icons && vite",
+    "dev:firefox": "pnpm icons && vite --mode firefox",
+    "zip": "pnpm build && node scripts/zip.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.270",
+    "@types/firefox-webext-browser": "^120.0.4",
+    "@types/node": "^22.10.0",
+    "sharp": "^0.33.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "vite-plugin-web-extension": "^4.4.3"
+  },
+  "packageManager": "pnpm@10.33.0"
+}

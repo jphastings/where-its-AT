@@ -1,0 +1,11 @@
+node_modules/
+dist/
+public/icons/
+.DS_Store
+*.log
+
+# Safari build artifacts
+safari-build/
+*.xcodeproj
+*.xcworkspace
+build/
