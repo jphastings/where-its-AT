@@ -74,13 +74,9 @@ function findItems(): DetectedItem[] {
 }
 
 function sendScanResult(count: number): void {
-  console.log(`[where-its-at] content scan: ${count} reference(s)`);
   try {
     chrome.runtime
       .sendMessage({ type: "scan-result", count })
-      .then((response) => {
-        console.log(`[where-its-at] background ack:`, response);
-      })
       .catch((err) => {
         console.warn(
           "[where-its-at] sendMessage rejected — background never replied:",

@@ -32,8 +32,6 @@ const ICONS = {
 type IconPaths = (typeof ICONS)[keyof typeof ICONS];
 type IconName = keyof typeof ICONS;
 
-const TAG = "[where-its-at]";
-
 function getState(tabId: number): TabState {
   let state = tabs.get(tabId);
   if (!state) {
@@ -105,7 +103,6 @@ async function getIconImageData(
 async function refresh(tabId: number): Promise<void> {
   const state = getState(tabId);
   const iconName = pickIconName(state);
-  console.log(`${TAG} refresh tab=${tabId} → ${iconName}`, state);
   try {
     const imageData = await getIconImageData(iconName);
     await Promise.all([
@@ -113,14 +110,14 @@ async function refresh(tabId: number): Promise<void> {
       chrome.action.setTitle({ tabId, title: pickTitle(state) }),
     ]);
   } catch (err) {
-    console.warn(`${TAG} refresh failed for tab=${tabId}:`, err);
+    console.warn(`[where-its-at] refresh failed for tab=${tabId}:`, err);
   }
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const tabId = sender.tab?.id;
   if (typeof tabId !== "number") {
-    console.warn(`${TAG} ignoring message without tabId:`, message);
+    console.warn("[where-its-at] ignoring message without tabId:", message);
     return false;
   }
   const state = getState(tabId);
@@ -129,14 +126,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     state.count = Number(message.count) || 0;
     state.detected = state.count > 0;
     if (!state.detected) state.engaged = false;
-    console.log(`${TAG} scan-result tab=${tabId} count=${state.count}`);
     void refresh(tabId);
     sendResponse({ ok: true });
     return false;
   }
 
   if (message?.type === "open" && typeof message.url === "string") {
-    console.log(`${TAG} open url=${message.url}`);
     void chrome.tabs.create({ url: message.url, active: true });
     sendResponse({ ok: true });
     return false;
@@ -202,23 +197,14 @@ async function reinjectExistingTabs(): Promise<void> {
           target: { tabId: tab.id, allFrames: false },
           files: ["src/content.js"],
         });
-        console.log(`${TAG} re-injected content script into tab=${tab.id}`);
-      } catch (err) {
+      } catch {
         // Some pages (chrome.google.com/webstore, view-source:, the Web Store,
         // PDF viewer, etc.) refuse injection; that's expected.
-        console.debug(`${TAG} skipped tab=${tab.id} (${tab.url}):`, err);
       }
     }),
   );
 }
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log(`${TAG} onInstalled — re-injecting content scripts`);
   void reinjectExistingTabs();
 });
-
-chrome.runtime.onStartup.addListener(() => {
-  console.log(`${TAG} onStartup`);
-});
-
-console.log(`${TAG} background loaded`);
