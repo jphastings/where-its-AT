@@ -264,6 +264,7 @@ function scheduleLayout(): void {
 
 function activate(): void {
   if (STATE.active) return;
+  clearTimeout(scanTimer);
   STATE.items = findItems();
   if (STATE.items.length === 0) {
     sendScanResult(0);
@@ -306,12 +307,17 @@ function deactivate(): void {
 
 let scanTimer: ReturnType<typeof setTimeout> | undefined;
 function scheduleScan(): void {
+  // While the overlay is engaged we rebuild zone divs on every layout pass,
+  // which would itself satisfy the MutationObserver and cause a feedback loop
+  // (rescan → rebuild zones → mutation → rescan). updateLayout is already
+  // driven by scroll/resize via rAF, so skipping mutation-driven rescans
+  // here is safe.
+  if (STATE.active) return;
   clearTimeout(scanTimer);
   scanTimer = setTimeout(() => {
     const items = findItems();
     STATE.items = items;
     sendScanResult(items.length);
-    if (STATE.active) updateLayout();
   }, 400);
 }
 
