@@ -13,7 +13,7 @@ const tabs = new Map<number, TabState>();
 const MENU_PARENT_ID = "wia-parent";
 const MENU_VISIT_ID = "wia-visit";
 const MENU_COPY_ID = "wia-copy";
-const MENU_CONTEXTS: chrome.contextMenus.ContextType[] = [
+const MENU_CONTEXTS: NonNullable<chrome.contextMenus.CreateProperties["contexts"]> = [
   "page",
   "link",
   "selection",
