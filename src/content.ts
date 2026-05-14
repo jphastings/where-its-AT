@@ -507,7 +507,7 @@ const OVERLAY_CSS = `
     position: fixed;
     inset: 0;
     z-index: 2147483640;
-    pointer-events: none;
+    pointer-events: auto;
     color-scheme: light dark;
   }
   #${OVERLAY_ID} svg {
