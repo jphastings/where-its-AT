@@ -70,8 +70,10 @@ function deriveAtUri(el: Element): string | null {
 function findItems(): DetectedItem[] {
   const seen = new Set<Element>();
   const items: DetectedItem[] = [];
+  const root = document.body;
+  if (!root) return items;
   for (const selector of SELECTORS) {
-    document.querySelectorAll(selector).forEach((el) => {
+    root.querySelectorAll(selector).forEach((el) => {
       if (seen.has(el)) return;
       const atUri = deriveAtUri(el);
       if (!atUri) return;
@@ -479,12 +481,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 const observer = new MutationObserver(scheduleScan);
-observer.observe(document.documentElement, {
-  childList: true,
-  subtree: true,
-  attributes: true,
-  attributeFilter: ["typeof", "resource", "href"],
-});
+if (document.body) {
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["typeof", "resource", "href"],
+  });
+}
 
 // Initial scan
 STATE.items = findItems();
