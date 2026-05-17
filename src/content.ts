@@ -15,6 +15,9 @@ interface State {
   tooltip: HTMLDivElement | null;
   notice: HTMLDivElement | null;
   hoveredZone: HTMLDivElement | null;
+  // On touch, the first tap arms a zone (shows its URI) and only the second
+  // tap on the same zone executes the action.
+  selectedAtUri: string | null;
 }
 
 const STATE: State = {
@@ -25,7 +28,10 @@ const STATE: State = {
   tooltip: null,
   notice: null,
   hoveredZone: null,
+  selectedAtUri: null,
 };
+
+let lastPointerType = "mouse";
 
 const OVERLAY_ID = "__wia-overlay";
 const ZONES_ID = "__wia-zones";
@@ -223,6 +229,36 @@ function updateLayout(): void {
     zone.style.borderRadius = `${RADIUS}px`;
     zonesEl.appendChild(zone);
   });
+
+  // Re-resolve hoveredZone against the freshly-rebuilt DOM. Otherwise the
+  // reference points at a detached element whose getBoundingClientRect is
+  // (0,0,0,0), and the next positionTooltip call pins the tooltip to the
+  // viewport's top-left. (Notable on Chrome touch, where the synthetic
+  // mouseout from a tap may not fire until the user taps elsewhere.)
+  if (STATE.hoveredZone) {
+    const hoveredUri = STATE.hoveredZone.dataset.uri;
+    const next = hoveredUri
+      ? zonesEl.querySelector<HTMLDivElement>(
+          `.__wia-zone[data-uri="${CSS.escape(hoveredUri)}"]`,
+        )
+      : null;
+    STATE.hoveredZone = next;
+    if (next) next.classList.add("__wia-zone--hover");
+  }
+
+  // Reapply touch-selection highlight after the rebuild, or clear the
+  // selection if its zone no longer exists in the DOM.
+  if (STATE.selectedAtUri) {
+    const sel = zonesEl.querySelector<HTMLDivElement>(
+      `.__wia-zone[data-uri="${CSS.escape(STATE.selectedAtUri)}"]`,
+    );
+    if (sel) {
+      sel.classList.add("__wia-zone--hover");
+    } else {
+      STATE.selectedAtUri = null;
+      if (!STATE.hoveredZone) hideTooltip();
+    }
+  }
 }
 
 function positionTooltip(zone: HTMLDivElement): void {
@@ -231,20 +267,26 @@ function positionTooltip(zone: HTMLDivElement): void {
   tooltip.textContent = zone.dataset.uri ?? "";
   tooltip.hidden = false;
 
+  // Force a synchronous layout pass before measuring — when the tooltip
+  // transitions from `display:none` to visible (e.g. on the first tap on
+  // mobile, where there's no preceding mouseover), reading getBoundingClientRect
+  // alone can return a stale rect that drives the position math into a
+  // clamp pinned to the viewport's top-left.
+  const tipHeight = tooltip.offsetHeight;
+  const tipWidth = tooltip.offsetWidth;
   const zoneRect = zone.getBoundingClientRect();
-  const tipRect = tooltip.getBoundingClientRect();
   const margin = 8;
 
-  let top = zoneRect.top - tipRect.height - margin;
+  let top = zoneRect.top - tipHeight - margin;
   if (top < margin) {
     top = zoneRect.bottom + margin;
   }
-  if (top + tipRect.height > window.innerHeight - margin) {
-    top = clamp(zoneRect.top + margin, margin, window.innerHeight - tipRect.height - margin);
+  if (top + tipHeight > window.innerHeight - margin) {
+    top = clamp(zoneRect.top + margin, margin, window.innerHeight - tipHeight - margin);
   }
 
-  let left = zoneRect.left + zoneRect.width / 2 - tipRect.width / 2;
-  left = clamp(left, margin, window.innerWidth - tipRect.width - margin);
+  let left = zoneRect.left + zoneRect.width / 2 - tipWidth / 2;
+  left = clamp(left, margin, window.innerWidth - tipWidth - margin);
 
   tooltip.style.top = `${top}px`;
   tooltip.style.left = `${left}px`;
@@ -252,6 +294,43 @@ function positionTooltip(zone: HTMLDivElement): void {
 
 function hideTooltip(): void {
   if (STATE.tooltip) STATE.tooltip.hidden = true;
+}
+
+function isTouchInteraction(): boolean {
+  return lastPointerType === "touch" || lastPointerType === "pen";
+}
+
+function findZoneByUri(uri: string): HTMLDivElement | null {
+  return (
+    STATE.zones?.querySelector<HTMLDivElement>(
+      `.__wia-zone[data-uri="${CSS.escape(uri)}"]`,
+    ) ?? null
+  );
+}
+
+function setSelectedAtUri(uri: string | null): void {
+  if (STATE.selectedAtUri === uri) return;
+  if (STATE.selectedAtUri) {
+    const prev = findZoneByUri(STATE.selectedAtUri);
+    // Only strip the highlight if a live mouse hover isn't keeping it lit.
+    if (prev && prev !== STATE.hoveredZone) {
+      prev.classList.remove("__wia-zone--hover");
+    }
+  }
+  STATE.selectedAtUri = uri;
+  if (!uri) {
+    if (!STATE.hoveredZone) hideTooltip();
+    return;
+  }
+  const next = findZoneByUri(uri);
+  if (next) {
+    next.classList.add("__wia-zone--hover");
+    positionTooltip(next);
+  }
+}
+
+function onPointerDown(event: PointerEvent): void {
+  lastPointerType = event.pointerType || "mouse";
 }
 
 function onZoneMouseOver(event: MouseEvent): void {
@@ -273,8 +352,11 @@ function onZoneMouseOut(event: MouseEvent): void {
     ".__wia-zone",
   );
   if (related === target) return;
-  target.classList.remove("__wia-zone--hover");
   if (STATE.hoveredZone === target) STATE.hoveredZone = null;
+  // Chrome on touch fires a synthetic mouseout immediately after click; if this
+  // zone is the touch-armed selection, keep the highlight and tooltip up.
+  if (target.dataset.uri === STATE.selectedAtUri) return;
+  target.classList.remove("__wia-zone--hover");
   hideTooltip();
 }
 
@@ -302,6 +384,14 @@ function onZoneClick(event: MouseEvent): void {
   event.stopPropagation();
   const uri = target.dataset.uri;
   if (!uri) return;
+
+  // On touch/pen, require two taps on the same zone: the first arms it
+  // (highlight + tooltip), the second executes the action.
+  if (isTouchInteraction() && STATE.selectedAtUri !== uri) {
+    setSelectedAtUri(uri);
+    return;
+  }
+  setSelectedAtUri(null);
 
   void (async () => {
     const action = await loadAction();
@@ -338,7 +428,12 @@ function scheduleLayout(): void {
   layoutRaf = requestAnimationFrame(() => {
     layoutRaf = 0;
     updateLayout();
-    if (STATE.hoveredZone) positionTooltip(STATE.hoveredZone);
+    if (STATE.hoveredZone) {
+      positionTooltip(STATE.hoveredZone);
+    } else if (STATE.selectedAtUri) {
+      const zone = findZoneByUri(STATE.selectedAtUri);
+      if (zone) positionTooltip(zone);
+    }
   });
 }
 
@@ -366,11 +461,17 @@ function activate(): void {
   STATE.zones.addEventListener("mouseover", onZoneMouseOver);
   STATE.zones.addEventListener("mouseout", onZoneMouseOut);
   STATE.zones.addEventListener("click", onZoneClick);
+  STATE.overlay.addEventListener("click", onOverlayClick);
+  window.addEventListener("pointerdown", onPointerDown, true);
   window.addEventListener("scroll", scheduleLayout, true);
   window.addEventListener("resize", scheduleLayout);
   window.addEventListener("keydown", onKeyDown, true);
 
   updateLayout();
+}
+
+function onOverlayClick(_event: MouseEvent): void {
+  setSelectedAtUri(null);
 }
 
 function deactivate(): void {
@@ -385,6 +486,8 @@ function deactivate(): void {
   STATE.tooltip = null;
   STATE.notice = null;
   STATE.hoveredZone = null;
+  STATE.selectedAtUri = null;
+  window.removeEventListener("pointerdown", onPointerDown, true);
   window.removeEventListener("scroll", scheduleLayout, true);
   window.removeEventListener("resize", scheduleLayout);
   window.removeEventListener("keydown", onKeyDown, true);
